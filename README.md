@@ -28,11 +28,14 @@ We implemented VADER in Python using NLTK’s VADER library. Identically to our 
 Bird, S. (2006, July). NLTK: the natural language toolkit. In Proceedings of the COLING/ACL
 on Interactive presentation sessions (pp. 69-72). Association for Computational
 Linguistics.
+
 Bradley, M. M., & Lang, P. J. (1999). Affective norms for English words (ANEW): Instruction
 manual and affective ratings (pp. 1-45). Technical report C-1, the center for research in
 psychophysiology, University of Florida.
+
 Hutto, C. J., & Gilbert, E. (2014, May). Vader: A parsimonious rule-based model for sentiment
 analysis of social media text. In Eighth international AAAI conference on weblogs and
 social media.
+
 Warriner, A. B., Kuperman, V., & Brysbaert, M. (2013). Norms of valence, arousal, and
 dominance for 13,915 English lemmas. Behavior research methods, 45(4), 1191-1207.
