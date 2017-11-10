@@ -20,9 +20,10 @@ import os
 import statistics
 import time
 import argparse
+from stanfordcorenlp import StanfordCoreNLP
+nlp = StanfordCoreNLP('C:/Users/Doris/software tools/stanford-corenlp-full-2016-10-31')
 
 from nltk import tokenize
-from nltk import word_tokenize
 from nltk.corpus import stopwords
 
 stops = set(stopwords.words("english"))
@@ -49,19 +50,23 @@ def analyzefile(input_file, output_dir, mode):
         print('Empty file.')
         return
 
+    from nltk.stem.wordnet import WordNetLemmatizer
+    lmtzr = WordNetLemmatizer()
+
     # otherwise, split into sentences
     sentences = tokenize.sent_tokenize(fulltext)
     i = 1 # to store sentence index
     # check each word in sentence for sentiment and write to output_file
     with open(output_file, 'w', newline='') as csvfile:
         fieldnames = ['Sentence ID', 'Sentence', 'Sentiment', 'Sentiment Label', 'Arousal', 'Dominance',
-                      'Found Words', 'Word List']
+                      '# Words Found', 'Found Words', 'All Words']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
         # analyze each sentence for sentiment
         for s in sentences:
             # print("S" + str(i) +": " + s)
+            all_words = []
             found_words = []
             total_words = 0
             v_list = []  # holds valence scores
@@ -69,39 +74,53 @@ def analyzefile(input_file, output_dir, mode):
             d_list = []  # holds dominance scores
 
             # search for each valid word's sentiment in ANEW
-            words = word_tokenize(s.lower())
-            filtered_words = [word for word in words if word.isalpha()]  # strip out words with punctuation
-            for index, w in enumerate(filtered_words):
-                # don't process stops
-                if w in stops:
+            words = nlp.pos_tag(s.lower())
+            for index, p in enumerate(words):
+                # don't process stops or words w/ punctuation
+                w = p[0]
+                pos = p[1]
+                if w in stops or not w.isalpha():
                     continue
 
                 # check for negation in 3 words before current word
-                neg = False
                 j = index-1
+                neg = False
                 while j >= 0 and j >= index-3:
-                    if filtered_words[j] == 'not' or filtered_words[j] == 'no':
+                    if words[j][0] == 'not' or words[j][0] == 'no' or words[j][0] == 'n\'t':
                         neg = True
+                        break
                     j -= 1
 
-                # lemmatize word
-                from nltk.stem.wordnet import WordNetLemmatizer
-                lmtzr = WordNetLemmatizer()
-                lemma = lmtzr.lemmatize(w, pos='v')
-                if lemma == w:
-                    lemma = lmtzr.lemmatize(w, pos='n')
+                # lemmatize word based on pos
+                if pos[0] == 'N' or pos[0] == 'V':
+                    lemma = lmtzr.lemmatize(w, pos=pos[0].lower())
+                else:
+                    lemma = w
 
-                total_words += 1
+                all_words.append(lemma)
 
                 # search for lemmatized word in ANEW
                 with open(anew) as csvfile:
                     reader = csv.DictReader(csvfile)
                     for row in reader:
                         if row['Word'].casefold() == lemma.casefold():
-                            found_words.append(lemma)
-                            v_list.append(float(row['valence']))
-                            a_list.append(float(row['arousal']))
-                            d_list.append(float(row['dominance']))
+                            if neg:
+                                found_words.append("neg-"+lemma)
+                            else:
+                                found_words.append(lemma)
+                            v = float(row['valence'])
+                            a = float(row['arousal'])
+                            d = float(row['dominance'])
+
+                            if neg:
+                                # reverse polarity for this word
+                                v = 5 - (v - 5)
+                                a = 5 - (a - 5)
+                                d = 5 - (d - 5)
+
+                            v_list.append(v)
+                            a_list.append(a)
+                            d_list.append(d)
 
             if len(found_words) == 0:  # no words found in ANEW for this sentence
                 writer.writerow({'Sentence ID': i,
@@ -110,7 +129,9 @@ def analyzefile(input_file, output_dir, mode):
                                  'Sentiment Label': 'N/A',
                                  'Arousal': 'N/A',
                                  'Dominance': 'N/A',
-                                 'Found Words': 0
+                                 '# Words Found': 0,
+                                 'Found Words': 'N/A',
+                                 'All Words': all_words
                                  })
                 i += 1
             else:  # output sentiment info for this sentence
@@ -125,17 +146,11 @@ def analyzefile(input_file, output_dir, mode):
                     arousal = statistics.mean(a_list)
                     dominance = statistics.mean(d_list)
 
-                if neg:  # reverse polarity
-                    sentiment = 5 - (sentiment-5)
-                    arousal = 5 - (arousal-5)
-                    dominance = 5 - (dominance-5)
-
                 # set sentiment label
-                if sentiment > 5:
+                label = 'neutral'
+                if sentiment > 6:
                     label = 'positive'
-                elif sentiment == 5:
-                    label = 'neutral'
-                else:
+                elif sentiment < 4:
                     label = 'negative'
 
                 writer.writerow({'Sentence ID': i,
@@ -144,8 +159,9 @@ def analyzefile(input_file, output_dir, mode):
                                  'Sentiment Label': label,
                                  'Arousal': arousal,
                                  'Dominance': dominance,
-                                 'Found Words': ("%d out of %d" % (len(found_words), total_words)),
-                                 'Word List': found_words
+                                 '# Words Found': ("%d out of %d" % (len(found_words), len(all_words))),
+                                 'Found Words': found_words,
+                                 'All Words': all_words
                                  })
                 i += 1
 
@@ -156,6 +172,7 @@ def main(input_file, input_dir, output_dir, mode):
     :param input_file:
     :param input_dir:
     :param output_dir:
+    :param mode:
     :return:
     """
 
